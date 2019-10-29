@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "946289947808",
+    "firebase_url": "https://newagent-94019.firebaseio.com",
+    "project_id": "newagent-94019",
+    "storage_bucket": "newagent-94019.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:946289947808:android:e38c18d43aa7eff36cc5c5",
+        "android_client_info": {
+          "package_name": "br.com.adrianofpinheiro.chat_online"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "946289947808-0n17g2ikfbc8fq6cpmjleltc0clpk5vj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.adrianofpinheiro.chat_online",
+            "certificate_hash": "a496c71e4907312c9d74066724218278b2bda307"
+          }
+        },
+        {
+          "client_id": "946289947808-8762k01ak03e199d110n2ftmk33925ni.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBymm8WFEECoC2vW3kebHIEzQbVz62_ZxM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "946289947808-8762k01ak03e199d110n2ftmk33925ni.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
