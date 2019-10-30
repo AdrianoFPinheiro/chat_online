@@ -1,6 +1,11 @@
+import 'dart:ffi';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/rendering.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 void main() {
   // Teste do Firebase DataBase
@@ -20,15 +25,46 @@ final ThemeData kDefaultTheme = ThemeData(
   accentColor: Colors.orangeAccent[400],
 );
 
+final googleSignIn = GoogleSignIn();
+final auth = FirebaseAuth.instance;
+
+Future<Null> _ensureLogggedIn() async {
+  GoogleSignInAccount user = googleSignIn.currentUser;
+  if (user == null) {
+    await googleSignIn.signInSilently();
+  }
+  if (user == null) {
+    await googleSignIn.signIn();
+  }
+  if (await auth.currentUser() == null) {
+    GoogleSignInAuthentication credentials =
+        await googleSignIn.currentUser.authentication;
+    await auth.signInWithCredential(GoogleAuthProvider.getCredential(
+        idToken: credentials.idToken, accessToken: credentials.accessToken));
+  }
+}
+
+_handleSubmitted(String text) async {
+  await _ensureLogggedIn();
+  _sendMessage(text: text);
+}
+
+void _sendMessage({String text, String imgUrl}) {
+  Firestore.instance.collection("messages").add({
+    "text": text,
+    "imgUrl": imgUrl,
+    "senderName": googleSignIn.currentUser.displayName,
+    "senderPhotoUrl": googleSignIn.currentUser.photoUrl
+  });
+}
+
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: "Chat App",
       debugShowCheckedModeBanner: false,
-      theme: Theme
-          .of(context)
-          .platform == TargetPlatform.iOS
+      theme: Theme.of(context).platform == TargetPlatform.iOS
           ? kIOSTheme
           : kDefaultTheme,
       home: ChatScreen(),
@@ -52,26 +88,34 @@ class _ChatScreenState extends State<ChatScreen> {
             title: Text("Chat App"),
             centerTitle: true,
             elevation:
-            Theme
-                .of(context)
-                .platform == TargetPlatform.iOS ? 0.0 : 4.0,
+                Theme.of(context).platform == TargetPlatform.iOS ? 0.0 : 4.0,
           ),
           body: Column(
             children: <Widget>[
               Expanded(
-                  child: ListView(
-                    children: <Widget>[
-                      ChatMessage(),
-                      ChatMessage(),
-                      ChatMessage()
-                    ],
-                  ),
+                child: StreamBuilder(
+                    stream: Firestore.instance.collection("messages").snapshots(),
+                    builder: (context, snapshot) {
+                      switch (snapshot.connectionState) {
+                        case ConnectionState.none:
+                        case ConnectionState.waiting:
+                          return Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        default:
+                          return ListView.builder(
+                              reverse: true,
+                              itemCount: snapshot.data.documents.length,
+                              itemBuilder: (context, index) {
+                                List r = snapshot.data.documents.reversed.toList();
+                                return ChatMessage(r[index].data);
+                              });
+                      }
+                    }),
               ),
               Container(
                 decoration: BoxDecoration(
-                  color: Theme
-                      .of(context)
-                      .cardColor,
+                  color: Theme.of(context).cardColor,
                 ),
                 child: TextComposer(),
               )
@@ -87,55 +131,70 @@ class TextComposer extends StatefulWidget {
 }
 
 class _TextComposerState extends State<TextComposer> {
+  final _textController = TextEditingController();
   bool _isComposing = false;
+
+  void _reset() {
+    _textController.clear();
+    FocusScope.of(context).requestFocus(new FocusNode());
+    setState(() {
+      _isComposing = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return IconTheme(
-      data: IconThemeData(color: Theme
-          .of(context)
-          .accentColor),
+      data: IconThemeData(color: Theme.of(context).accentColor),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8.0),
-        decoration: Theme
-            .of(context)
-            .platform == TargetPlatform.iOS
+        decoration: Theme.of(context).platform == TargetPlatform.iOS
             ? BoxDecoration(
-            border: Border(top: BorderSide(color: Colors.grey[200])))
+                border: Border(top: BorderSide(color: Colors.grey[200])))
             : null,
         child: Row(
           children: <Widget>[
             Container(
               child:
-              IconButton(icon: Icon(Icons.photo_camera), onPressed: () {}),
+                  IconButton(icon: Icon(Icons.photo_camera), onPressed: () {}),
             ),
             Expanded(
               child: TextField(
+                controller: _textController,
                 decoration:
-                InputDecoration.collapsed(hintText: "Enviar uma mensagem"),
+                    InputDecoration.collapsed(hintText: "Enviar uma mensagem"),
                 onChanged: (text) {
                   setState(() {
                     _isComposing = text.length > 0;
                   });
                 },
+                onSubmitted: (text) {
+                  _handleSubmitted(text);
+                  _reset();
+                },
               ),
-            ),
-            Divider(
-              height: 2.0,
             ),
             Container(
                 margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Theme
-                    .of(context)
-                    .platform == TargetPlatform.iOS
+                child: Theme.of(context).platform == TargetPlatform.iOS
                     ? CupertinoButton(
-                  child: Text("Enviar"),
-                  onPressed: _isComposing ? () {} : null,
-                )
+                        child: Text("Enviar"),
+                        onPressed: _isComposing
+                            ? () {
+                                _handleSubmitted(_textController.text);
+                                _reset();
+                              }
+                            : null,
+                      )
                     : IconButton(
-                  icon: Icon(Icons.send),
-                  onPressed: _isComposing ? () {} : null,
-                ))
+                        icon: Icon(Icons.send),
+                        onPressed: _isComposing
+                            ? () {
+                                _handleSubmitted(_textController.text);
+                                _reset();
+                              }
+                            : null,
+                      ))
           ],
         ),
       ),
@@ -144,6 +203,11 @@ class _TextComposerState extends State<TextComposer> {
 }
 
 class ChatMessage extends StatelessWidget {
+
+  final Map<String, dynamic> data;
+
+  ChatMessage(this.data);
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -154,22 +218,22 @@ class ChatMessage extends StatelessWidget {
           Container(
             margin: const EdgeInsets.only(right: 16.0),
             child: CircleAvatar(
-              backgroundImage: NetworkImage(
-                  "https://s2.glbimg.com/Zuz5QTdCesKk42uMjtJYzKwhQJA=/0x0:3240x2160/1600x0/smart/filters:strip_icc()/i.s3.glbimg.com/v1/AUTH_59edd422c0c84a879bd37670ae4f538a/internal_photos/bs/2019/X/1/6KAgaSQaeJ4NPq2XLzUQ/birdseclipse-caldas-3240.jpg"),
+              backgroundImage: NetworkImage(data["senderPhotoUrl"]),
             ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text("Adriano",
-                    style: Theme
-                        .of(context)
-                        .textTheme
-                        .subhead),
+                Text(
+                  data["senderName"],
+                  style: Theme.of(context).textTheme.subhead,
+                ),
                 Container(
-                  margin: const EdgeInsets.only(top: 5.0),
-                  child: Text("Teste"),
+                    margin: const EdgeInsets.only(top: 5.0),
+                    child: data["imgUrl"] != null ?
+                    Image.network(data["imgUrl"], width: 250.0,) :
+                    Text(data["text"])
                 )
               ],
             ),
@@ -179,5 +243,3 @@ class ChatMessage extends StatelessWidget {
     );
   }
 }
-
-
