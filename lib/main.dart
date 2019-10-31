@@ -1,11 +1,14 @@
 import 'dart:ffi';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   // Teste do Firebase DataBase
@@ -28,7 +31,7 @@ final ThemeData kDefaultTheme = ThemeData(
 final googleSignIn = GoogleSignIn();
 final auth = FirebaseAuth.instance;
 
-Future<Null> _ensureLogggedIn() async {
+Future<Null> _ensureLoggedIn() async {
   GoogleSignInAccount user = googleSignIn.currentUser;
   if (user == null) {
     await googleSignIn.signInSilently();
@@ -45,7 +48,7 @@ Future<Null> _ensureLogggedIn() async {
 }
 
 _handleSubmitted(String text) async {
-  await _ensureLogggedIn();
+  await _ensureLoggedIn();
   _sendMessage(text: text);
 }
 
@@ -94,7 +97,8 @@ class _ChatScreenState extends State<ChatScreen> {
             children: <Widget>[
               Expanded(
                 child: StreamBuilder(
-                    stream: Firestore.instance.collection("messages").snapshots(),
+                    stream:
+                        Firestore.instance.collection("messages").snapshots(),
                     builder: (context, snapshot) {
                       switch (snapshot.connectionState) {
                         case ConnectionState.none:
@@ -107,12 +111,14 @@ class _ChatScreenState extends State<ChatScreen> {
                               reverse: true,
                               itemCount: snapshot.data.documents.length,
                               itemBuilder: (context, index) {
-                                List r = snapshot.data.documents.reversed.toList();
+                                List r =
+                                    snapshot.data.documents.reversed.toList();
                                 return ChatMessage(r[index].data);
                               });
                       }
                     }),
               ),
+              Divider(height: 2.0,color: Colors.orange,),
               Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
@@ -155,8 +161,18 @@ class _TextComposerState extends State<TextComposer> {
         child: Row(
           children: <Widget>[
             Container(
-              child:
-                  IconButton(icon: Icon(Icons.photo_camera), onPressed: () {}),
+              child: IconButton(
+                  icon: Icon(Icons.photo_camera),
+                  onPressed: () async {
+                    await _ensureLoggedIn();
+                    File imgFile = await ImagePicker.pickImage(source: ImageSource.camera);
+                    if(imgFile == null) return;
+                    StorageUploadTask task = FirebaseStorage.instance.ref().
+                    child(googleSignIn.currentUser.id.toString() +
+                        DateTime.now().millisecondsSinceEpoch.toString()).putFile(imgFile);
+                    StorageTaskSnapshot snap = await task.onComplete;
+                    _sendMessage(imgUrl: await snap.ref.getDownloadURL());
+                  }),
             ),
             Expanded(
               child: TextField(
@@ -203,7 +219,6 @@ class _TextComposerState extends State<TextComposer> {
 }
 
 class ChatMessage extends StatelessWidget {
-
   final Map<String, dynamic> data;
 
   ChatMessage(this.data);
@@ -231,10 +246,12 @@ class ChatMessage extends StatelessWidget {
                 ),
                 Container(
                     margin: const EdgeInsets.only(top: 5.0),
-                    child: data["imgUrl"] != null ?
-                    Image.network(data["imgUrl"], width: 250.0,) :
-                    Text(data["text"])
-                )
+                    child: data["imgUrl"] != null
+                        ? Image.network(
+                            data["imgUrl"],
+                            width: 250.0,
+                          )
+                        : Text(data["text"]))
               ],
             ),
           )
